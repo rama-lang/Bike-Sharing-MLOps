@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+   # 1. LocalStack Service (S3 Simulation)
+  localstack:
+    image: localstack/localstack
+    container_name: localstack_main
+    ports:
+      - "4566:4566"
+    networks:
+      - bike-mlops-net
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+
+# 2. FastAPI Application Service
+
+
+  bike-app:
+    build: .
+    container_name: bike-prediction-app
+    ports:
+      - "8000:8000"
+    networks:
+      - bike-mlops-net
+    depends_on:
+      - localstack
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack_main:4566
+
+networks:
+  bike-mlops-net:
+    driver: bridge
