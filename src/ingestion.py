@@ -3,13 +3,15 @@ import pandas as pd
 import yaml
 import os
 
+CONFIG_PATH = os.path.join("/opt/airflow/src", "config.yaml")
+
 def load_data():
 
-    if not os.path.exists("config.yaml"):
-        print("Error: config.yaml file not found!")
+    if not os.path.exists(CONFIG_PATH):
+        print(f"Error: {CONFIG_PATH} file not found!")
         return None
 
-    with open("config.yaml", "r") as f:
+    with open(CONFIG_PATH, "r") as f:
         config = yaml.safe_load(f)
 
     try:
