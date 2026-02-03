@@ -6,7 +6,7 @@ import os
 CONFIG_PATH = os.path.join("/opt/airflow/src", "config.yaml")
 
 def load_data():
-
+    os.chdir("/opt/airflow")
     if not os.path.exists(CONFIG_PATH):
         print(f"Error: {CONFIG_PATH} file not found!")
         return None
