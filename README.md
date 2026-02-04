@@ -1,64 +1,26 @@
-🚲 Bike-Sharing Demand Prediction (End-to-End MLOps)
-This project implements a production-ready Machine Learning pipeline to predict bike-sharing demand. It demonstrates core MLOps principles including data ingestion from simulated cloud storage, containerization, and automated API deployment.
+🚲 End-to-End MLOps: Bike-Sharing Demand PredictionThis repository demonstrates a production-ready Automated Machine Learning Pipeline. It covers the entire lifecycle from data ingestion to automated model promotion and CI/CD.
 
-🏗️ Project Architecture
-The architecture follows a modular approach to ensure scalability and reproducibility:
+🏗️ Project ArchitectureThe pipeline is built on three main pillars:Orchestration (Airflow): Schedules and manages the workflow tasks.Model Governance (MLflow): Tracks experiments and manages the "Champion" model via the Model Registry.Infrastructure (Docker): Containerizes the entire stack, including LocalStack (S3) and the Airflow environment.
 
-Data Lake (S3): Raw data is hosted in a LocalStack S3 bucket to simulate AWS cloud environments.
+🚀 Key FeaturesContinuous Training (CT): Automated retraining triggers via Airflow to handle new data.Experiment Tracking: 
+Logging hyperparameters (e.g., n_estimators) and performance metrics (RMSE) using MLflow.Model Registry: 
+Automated versioning with the @champion alias for seamless production deployment.Cloud Simulation: Integrated LocalStack to simulate AWS S3 for data ingestion without cloud costs.CI/CD Pipeline: 
+Automated code quality and syntax checks using GitHub Actions.
 
-Ingestion Layer: A Python-based ingestion script fetches data using boto3 and handles local caching.
+🛠️ Tech StackCategoryTechnologyLanguagePython 3.9+OrchestrationApache AirflowML Tracking & RegistryMLflowCloud SimulationLocalStack (AWS S3)ContainerizationDocker & Docker ComposeCI/CDGitHub Actions
+📈 Pipeline WorkflowIngest: Fetches raw data from S3 (LocalStack) using boto3 and caches it in data/processed.Train: 
+Trains a Scikit-learn Random Forest model with dynamic hyperparameter logging.Evaluate & Register: 
+Compares new results with the existing @champion and registers the new version.Predict: 
+Loads the current @champion from the Registry for real-time or batch inference.
 
-Inference Service: A FastAPI application serves model predictions in real-time.
+💻 Setup & Run1. Start the InfrastructureSpin up the Airflow and MLflow containers:
+PowerShelldocker-compose up -d
 
-Orchestration: Entire stack is containerized using Docker with a custom bridge network for secure inter-container communication.
-
-🚀 Getting Started
-1. Prerequisites
-Docker & Docker Desktop
-
-Python 3.12+
-
-AWS CLI (optional, for manual S3 checks)
-
-2. Network & Infrastructure Setup
-First, create a dedicated network so the app and LocalStack can communicate:
-
-PowerShell
-docker network create bike-mlops-net
-Start LocalStack:
-
-PowerShell
-docker run --rm -d --name localstack_main --network bike-mlops-net -p 4566:4566 localstack/localstack
-3. Data Preparation (S3 Simulation)
-Create the bucket and upload the raw dataset:
-
-PowerShell
-# Create Bucket
+2. Setup LocalStack S3 (One-time)Simulate the cloud environment and upload the raw dataset:
+PowerShell# Create the S3 Bucket
 docker exec -it localstack_main awslocal s3 mb s3://bike-sharing-data
 
-# Upload Data
+# Upload Raw Data to S3
 docker cp data/raw/bike_sharing_raw.csv localstack_main:/tmp/data.csv
 docker exec -it localstack_main awslocal s3 cp /tmp/data.csv s3://bike-sharing-data/bike_sharing_raw.csv
-4. Build and Launch the API
-Build the Docker image and run the prediction service:
-
-PowerShell
-docker build -t bike-prediction-app .
-docker run -p 8000:8000 --network bike-mlops-net bike-prediction-app
-🧪 API Usage
-Once the container is running, access the interactive API documentation at: 👉 http://localhost:8000/docs
-
-Example Request:
-
-Endpoint: /predict
-
-Payload: Provide values for season, hr, temp, etc.
-
-Response: {"predicted_bikes": 19} (Sample output)
-
-🧠 Key MLOps Challenges Solved
-Container Networking: Resolved [Errno -2] by implementing a custom Docker bridge network, allowing seamless communication between the app and LocalStack.
-
-Cloud Simulation: Integrated LocalStack to test S3 ingestion logic without incurring AWS costs.
-
-Configuration Management: Utilized config.yaml to decouple environment variables from the core logic, ensuring the pipeline is portable.
+3. MonitoringAirflow UI: http://localhost:8080 (Check DAG status)MLflow UI: http://localhost:5000 (Compare model versions)
