@@ -48,8 +48,8 @@ with DAG(
     'bike_sharing_final_pipeline_v2',
     default_args=default_args,
     description='Automated 5-min Retraining Pipeline',
-    schedule_interval='*/5 * * * *',  # ప్రతి 5 నిమిషాలకు ఒకసారి
-    start_date=days_ago(0),           # వెంటనే స్టార్ట్ అవుతుంది
+    sschedule_interval='@daily',  # ప్రతి 5 నిమిషాలకు ఒకసారి
+    start_date=days_ago(1),           # వెంటనే స్టార్ట్ అవుతుంది
     catchup=False
 ) as dag:
 
