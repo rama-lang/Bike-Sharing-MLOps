@@ -24,3 +24,21 @@ docker exec -it localstack_main awslocal s3 mb s3://bike-sharing-data
 docker cp data/raw/bike_sharing_raw.csv localstack_main:/tmp/data.csv
 docker exec -it localstack_main awslocal s3 cp /tmp/data.csv s3://bike-sharing-data/bike_sharing_raw.csv
 3. MonitoringAirflow UI: http://localhost:8080 (Check DAG status)MLflow UI: http://localhost:5000 (Compare model versions)
+
+FOlder Structure:
+.
+├── .github/
+│   └── workflows/
+│       └── main.yml            # GitHub Actions (CI/CD)
+├── dags/
+│   └── bike_sharing_dag.py     # Airflow DAG (The Heart)
+├── src/
+│   ├── ingestion.py            # S3 Data Pulling
+│   ├── train.py                # Model Training & MLflow Registry
+│   ├── predict.py              # Inference Logic (The Brain)
+│   └── app.py                  # Streamlit/Flask UI
+├── data/                       # Local Data Storage
+├── docker-compose.yaml         # Container Orchestration
+├── Dockerfile                  # Image Build Instructions
+├── requirements.txt            # Python Dependencies
+└── README.md                   # Project Documentation
