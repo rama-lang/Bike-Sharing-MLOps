@@ -1,0 +1,33 @@
+name: Bike Sharing MLOps CI
+
+# ఎప్పుడు రన్ అవ్వాలి? మెయిన్ బ్రాంచ్ కి పుష్ చేసినప్పుడు
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  code-quality-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # కేవలం టెస్టింగ్ కి కావాల్సినవి మాత్రమే ఇక్కడ ఇస్తున్నాం
+        pip install pandas scikit-learn mlflow joblib pytest flake8
+
+    - name: Lint with flake8
+      run: |
+        # కోడ్ లో ఏవైనా తప్పులు ఉన్నాయేమో వెతుకుతుంది
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics

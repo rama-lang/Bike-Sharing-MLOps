@@ -1,6 +1,7 @@
 fastapi
 uvicorn
+mlflow
 pandas
-scikit-learn==1.8.0
+scikit-learn==1.3.2
 joblib
 pyyaml

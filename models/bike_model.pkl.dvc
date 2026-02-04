@@ -1,0 +1,5 @@
+outs:
+- md5: 2a30cc443c88a0c2e69f9532547bb03f
+  size: 120103297
+  hash: md5
+  path: bike_model.pkl

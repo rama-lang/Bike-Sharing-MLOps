@@ -1,70 +1,75 @@
 import pandas as pd
-import yaml
 import os
 import joblib
 import mlflow
 import mlflow.sklearn
-import traceback
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
-
-# కంటైనర్ లోపల పాత్స్
-CONFIG_PATH = "/opt/airflow/src/config.yaml"
-MODELS_DIR = "/opt/airflow/models"
+import numpy as np
+import random
 
 def train_model():
-    # 1. వర్కింగ్ డైరెక్టరీ మార్పు
-    os.chdir("/opt/airflow")
-    
-    mlflow.set_experiment("Bike_Sharing_Production")
-
-    if not os.path.exists(CONFIG_PATH):
-        print(f"❌ Error: Config file not found at {CONFIG_PATH}")
-        return
-
-    with open(CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f)
+    # --- 1. SMART CONFIG ---
+    if os.path.exists("/opt/airflow"):
+        BASE_PATH = "/opt/airflow"
+        TRACKING_URI = "http://172.18.0.1:5000"
+    else:
+        BASE_PATH = "."
+        TRACKING_URI = "http://localhost:5000"
+        
+    mlflow.set_tracking_uri(TRACKING_URI)
     
     try:
-        # 2. డేటా లోడింగ్
-        processed_dir = config['data']['processed_dir']
-        X_train = pd.read_csv(f"/opt/airflow/{processed_dir}/X_train.csv")
-        y_train = pd.read_csv(f"/opt/airflow/{processed_dir}/y_train.csv")
-        print(f"✅ Data loaded from {processed_dir}")
+        mlflow.set_experiment("Bike_Sharing_Production")
+    except Exception:
+        mlflow.set_experiment("Bike_Sharing_Production")
 
-        with mlflow.start_run(run_name="Random_Forest_Training"):
-            print("🚀 Model training started...........")
+    # --- 2. PATHS ---
+    X_train_path = os.path.join(BASE_PATH, "data/processed/X_train.csv")
+    y_train_path = os.path.join(BASE_PATH, "data/processed/y_train.csv")
+    save_path = os.path.join(BASE_PATH, "models/bike_model.pkl")
 
-            model = RandomForestRegressor(n_estimators=100, random_state=42)
+    if not os.path.exists(X_train_path):
+        raise FileNotFoundError(f"❌ డేటా దొరకలేదు రా! Path: {X_train_path}")
+
+    try:
+        X_train = pd.read_csv(X_train_path)
+        y_train = pd.read_csv(y_train_path)
+        
+        # --- 3. MLFLOW RUN ---
+        with mlflow.start_run(run_name="Airflow_Automated_Training"):
+            n_est = random.randint(50, 250) 
+            print(f"🚀 Training with n_estimators: {n_est}")
+            
+            model = RandomForestRegressor(n_estimators=n_est, random_state=42)
             model.fit(X_train, y_train.values.ravel())
 
-            y_pred = model.predict(X_train)
-            mse = mean_squared_error(y_train, y_pred)
+            predictions = model.predict(X_train)
+            rmse = np.sqrt(mean_squared_error(y_train, predictions))
 
-            mlflow.log_metric("training_mse", mse)
+            # ✅ ఇవి కచ్చితంగా ఈ 'with' బ్లాక్ లోపలే ఉండాలి
+            mlflow.log_param("n_estimators", n_est)
+            mlflow.log_metric("rmse", rmse)
 
-            # --- ఇక్కడ జాగ్రత్తగా చూడు (ఇండెంట్ కరెక్ట్ గా ఉండాలి) ---
+            # ✅ మోడల్ ని రిజిస్టర్ చేయడం - ఇది కూడా లోపలే ఉండాలి
+            mlflow.sklearn.log_model(
+                sk_model=model, 
+                artifact_path="bike_rf_model",
+                registered_model_name="Bike_Sharing_Model"
+            )
             
-            # 3. ఫోల్డర్ క్రియేషన్
-            os.makedirs(MODELS_DIR, exist_ok=True)
+            # --- 4. LOCAL SAVING ---
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            joblib.dump(model, save_path)
             
-            # 4. పాత్ సెట్టింగ్
-            file_name = os.path.basename(config['model']['save_path'])
-            final_save_path = os.path.join(MODELS_DIR, file_name)
-
-            print(f"DEBUG: Saving model to {final_save_path}")
+            print(f"✅ SUCCESS! RMSE: {rmse}")
+            print("✅ Model registered in MLflow Registry!")
             
-            # 5. మోడల్ సేవింగ్
-            joblib.dump(model, final_save_path)
-            mlflow.sklearn.log_model(model, "bike_rf_model")
-
-            print(f"✅ Success! Model saved at: {final_save_path}")
-            print(f"📊 MLflow Logged - MSE: {mse}")
+        return rmse
 
     except Exception as e:
-        print(f"❌ ERROR OCCURRED: {str(e)}")
-        print(traceback.format_exc()) 
-        raise e 
+        print(f"❌ ERROR inside train_model: {str(e)}")
+        raise e
 
 if __name__ == "__main__":
     train_model()

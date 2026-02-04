@@ -11,8 +11,29 @@ services:
       - bike-mlops-net
     environment:
       - SERVICES=s3
+    
+  # 2. MLflow Server (సవరించబడింది)
+  mlflow:
+    image: ghcr.io/mlflow/mlflow
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    networks:
+      - bike-mlops-net
+    environment:
+      - MLFLOW_SERVER_HOST_HEADER_CHECK=false
+      - MLFLOW_SERVER_CORS_ALLOWED_ORIGINS=*
+    volumes:
+      - ./mlruns:/mlflow/mlruns
+    # ఇక్కడ అసలైన మార్పు:
+    command: >
+      mlflow server 
+      --host 0.0.0.0 
+      --port 5000 
+      --backend-store-uri sqlite:///mlflow.db 
+      --default-artifact-root /mlflow/mlruns
 
-  # 2. Airflow Database (Postgres)
+  # 3. Airflow Database (Postgres)
   postgres:
     image: postgres:13
     container_name: postgres_db
@@ -28,7 +49,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # 3. Airflow Init (ఇది ఒక్కసారే రన్ అయ్యి డేటాబేస్ రెడీ చేస్తుంది)
+  # 4. Airflow Init
   airflow-init:
     image: apache/airflow:2.7.1
     depends_on:
@@ -41,17 +62,21 @@ services:
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
     command: db init
 
-  # 4. Airflow Webserver (UI - Port 8081 కి మార్చాను, 8080 క్లాష్ అవ్వకుండా)
+  # 5. Airflow Webserver
   webserver:
+    user: "0:0"
     image: apache/airflow:2.7.1
     container_name: airflow_webserver
     command: webserver
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "mlflow:host-gateway"
     depends_on:
       airflow-init:
         condition: service_completed_successfully
     build:
       context: .
-      dockerfile: Dockerfile.airflow  # ఇక్కడ మనం కొత్త ఫైల్ పేరు ఇస్తున్నాం
+      dockerfile: Dockerfile.airflow
     networks:
       - bike-mlops-net
     environment:
@@ -59,6 +84,7 @@ services:
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__SECRET_KEY=any_random_string_here
+      - AIRFLOW_UID=0
     ports:
       - "8081:8080" 
     volumes:
@@ -67,11 +93,15 @@ services:
       - ${PWD}/models:/opt/airflow/models  
       - ${PWD}/data:/opt/airflow/data      
 
-  # 5. Airflow Scheduler
+  # 6. Airflow Scheduler
   scheduler:
+    user: "0:0"
     image: apache/airflow:2.7.1
     container_name: airflow_scheduler
     command: scheduler
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "mlflow:host-gateway"
     depends_on:
       airflow-init:
         condition: service_completed_successfully
@@ -79,11 +109,12 @@ services:
       - bike-mlops-net
     build:
       context: .
-      dockerfile: Dockerfile.airflow  # ఇక్కడ మనం కొత్త ఫైల్ పేరు ఇస్తున్నాం
+      dockerfile: Dockerfile.airflow
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__WEBSERVER__SECRET_KEY=any_random_string_here
+      - AIRFLOW_UID=0
     volumes:
       - ${PWD}/dags:/opt/airflow/dags
       - ${PWD}/src:/opt/airflow/src
