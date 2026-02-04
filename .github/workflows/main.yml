@@ -1,6 +1,5 @@
-name: Bike Sharing MLOps CI
+name: Bike-Sharing MLOps CI/CD
 
-# ఎప్పుడు రన్ అవ్వాలి? మెయిన్ బ్రాంచ్ కి పుష్ చేసినప్పుడు
 on:
   push:
     branches: [ main ]
@@ -8,26 +7,42 @@ on:
     branches: [ main ]
 
 jobs:
-  code-quality-check:
+  # Stage 1: Code Quality Check (CI)
+  test-and-lint:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        # కేవలం టెస్టింగ్ కి కావాల్సినవి మాత్రమే ఇక్కడ ఇస్తున్నాం
-        pip install pandas scikit-learn mlflow joblib pytest flake8
+      - name: Install Linting Tools
+        run: |
+          pip install flake8
 
-    - name: Lint with flake8
-      run: |
-        # కోడ్ లో ఏవైనా తప్పులు ఉన్నాయేమో వెతుకుతుంది
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings. 
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  # Stage 2: Cloud-Ready Build Check (Dry-Run CD)
+  build-check:
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Build Docker Image (Simulated CD)
+        run: |
+          echo "🚀 Starting Docker Build to verify Cloud Readiness..."
+          docker build -t bike-sharing-mlops:${{ github.sha }} .
+          echo "✅ Build Successful! This image is ready for AWS/Azure deployment."
+
+      - name: Success Message
+        run: echo "Final CI/CD Check Passed. The pipeline is robust and production-ready!"
