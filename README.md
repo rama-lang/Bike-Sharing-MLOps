@@ -25,7 +25,7 @@ docker cp data/raw/bike_sharing_raw.csv localstack_main:/tmp/data.csv
 docker exec -it localstack_main awslocal s3 cp /tmp/data.csv s3://bike-sharing-data/bike_sharing_raw.csv
 3. MonitoringAirflow UI: http://localhost:8080 (Check DAG status)MLflow UI: http://localhost:5000 (Compare model versions)
 
-FOlder Structure:
+Folder Structure:
 .
 ├── .github/
 │   └── workflows/
