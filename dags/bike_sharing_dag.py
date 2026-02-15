@@ -1,72 +1,101 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago # <--- ఇది యాడ్ చేశాను
+from airflow.operators.bash import BashOperator
+from airflow.utils.dates import days_ago
 from datetime import datetime, timedelta
 import sys
 import os
+import pandas as pd
+import requests
 
-# src ఫోల్డర్ పాత్
-sys.path.append('/opt/airflow/src')
+# --- 1. API Call Function ---
+def call_live_api_predict():
+    # 🚨 Docker నుండి బయట ఉన్న Windows API ని పట్టుకోవడానికి ఇదే సరైన అడ్రస్
+    API_URL = "http://host.docker.internal:9999/predict"
+    
+    # 🚨 'yr' తీసేశాను (మోడల్ కి ఇది తెలియదు కాబట్టి)
+    params = {
+        "season": 1, "mnth": 6, "hr": 10,
+        "holiday": 0, "weekday": 3, "workingday": 1,
+        "weathersit": 1, "temp": 0.5, "atemp": 0.5,
+        "hum": 0.5, "windspeed": 0.1
+    }
+    
+    print(f"🔗 Attempting to connect to: {API_URL}")
+    try:
+        # 15 సెకన్ల టైమ్ అవుట్ ఇచ్చాను
+        response = requests.get(API_URL, params=params, timeout=60)
+        
+        if response.status_code == 200:
+            print(f"✅ API SUCCESS! Prediction Saved: {response.json()}")
+        else:
+            print(f"❌ API Error: Status {response.status_code}")
+            print(f"Response: {response.text}")
+            raise Exception(f"API failed with status {response.status_code}")
+            
+    except Exception as e:
+        print(f"💥 Critical Connection Error: {str(e)}")
+        # ఇక్కడ raise వాడటం వల్ల ఎర్రర్ వస్తే టాస్క్ Red అవుతుంది, అప్పుడు కారణం తెలుస్తుంది
+        raise e
 
-try:
-    from ingestion import load_data
-    from train import train_model 
-except ImportError as e:
-    print(f"Import Error: {e}")
-
-# Inference Test Function
+# --- 2. Internal Test Function ---
 def run_inference_test():
-    import pandas as pd
+    sys.path.append('/opt/airflow/src')
     from predict import make_prediction
     
     data_path = "/opt/airflow/data/processed/X_train.csv"
-    
     if os.path.exists(data_path):
-        full_df = pd.read_csv(data_path)
-        sample_df = full_df.sample(n=1)
-        
-        # 'temp' ని మార్చుతున్నాం వాల్యూ మారుతుందో లేదో చూడటానికి
-        if 'temp' in sample_df.columns:
-            sample_df['temp'] = 0.9  
-        
-        print(f"🚀 Forced Input Data: {sample_df.iloc[0].to_dict()}")
-        sample_df = sample_df.astype(float)
+        sample_df = pd.read_csv(data_path).sample(n=1)
+        # Feature mismatch రాకుండా 'yr' తీసేస్తున్నాం
+        if 'yr' in sample_df.columns:
+            sample_df = sample_df.drop(columns=['yr'])
         
         result = make_prediction(sample_df)
-        print(f"✅ Prediction Result: {result}")
+        print(f"✅ Internal Test Result: {result}")
     else:
-        raise FileNotFoundError(f"Data missing at {data_path}")
+        print("⚠️ Data path not found for internal test.")
 
+# DAG Args
 default_args = {
     'owner': 'rama',
-    'retries': 1,
+    'retries': 0, # ఎర్రర్ వస్తే వెంటనే తెలియడానికి 0 పెట్టాను
     'retry_delay': timedelta(minutes=5),
 }
 
-# --- ఒకే ఒక DAG డెఫినిషన్ ఉండాలి ---
+# --- 3. DAG Definition (Named v4 to avoid Cache issues) ---
 with DAG(
-    'bike_sharing_final_pipeline_v2',
+    'bike_sharing_final_pipeline_v4',
     default_args=default_args,
-    description='Automated 5-min Retraining Pipeline',
-    sschedule_interval='@daily',  # ప్రతి 5 నిమిషాలకు ఒకసారి
-    start_date=days_ago(1),           # వెంటనే స్టార్ట్ అవుతుంది
+    description='Final Pipeline with host.docker.internal fix',
+    schedule_interval='@daily', 
+    start_date=days_ago(1),
     catchup=False
 ) as dag:
 
-    ingest_task = PythonOperator(
+    ingest_task = BashOperator(
         task_id='ingest_data',
-        python_callable=load_data
+        bash_command='python /opt/airflow/src/ingestion.py'
     )
 
-    train_task = PythonOperator(
+    validate_task = BashOperator(
+        task_id='validate_data',
+        bash_command='python /opt/airflow/src/validate_data.py'
+    )
+
+    train_task = BashOperator(
         task_id='train_model',
-        python_callable=train_model
+        bash_command='python /opt/airflow/src/train.py'
     )
 
     predict_task = PythonOperator(
-        task_id='test_prediction_tracking',
+        task_id='test_internal_prediction',
         python_callable=run_inference_test
     )
 
-    # టాస్క్ ఆర్డర్
-    ingest_task >> train_task >> predict_task
+    api_task = PythonOperator(
+        task_id='call_live_api_tracking',
+        python_callable=call_live_api_predict
+    )
+
+    # Workflow
+    ingest_task >> validate_task >> train_task >> predict_task >> api_task

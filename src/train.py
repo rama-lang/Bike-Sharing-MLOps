@@ -3,107 +3,78 @@ import os
 import joblib
 import mlflow
 import mlflow.sklearn
-from mlflow.tracking import MlflowClient # <--- ఇది ముఖ్యం
+from mlflow.tracking import MlflowClient
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 import numpy as np
 import random
-
-def automated_promotion(model_name, current_rmse, current_version):
-    """
-    పాత ఛాంపియన్ తో కొత్త మోడల్ ని కంపేర్ చేసి ఆటోమేటిక్ గా ప్రమోట్ చేస్తుంది.
-    """
-    client = MlflowClient()
-    alias = "champion"
-    
-    try:
-        # 1. ప్రస్తుతం ఉన్న ఛాంపియన్ డేటా తేవడం
-        champ_ver = client.get_model_version_by_alias(model_name, alias)
-        champ_run = client.get_run(champ_ver.run_id)
-        champ_rmse = champ_run.data.metrics.get("rmse")
-        
-        print(f"🏆 Current Champion RMSE: {champ_rmse}")
-        print(f"🆕 New Model RMSE: {current_rmse}")
-
-        # 2. కంపారిజన్: కొత్తది బెటర్ అయితే అలియాస్ మార్చు
-        if current_rmse < champ_rmse:
-            print(f"🚀 Success: New model is better! Moving @champion to Version {current_version}")
-            client.set_registered_model_alias(model_name, alias, str(current_version))
-        else:
-            print("😴 Old champion is still the best. No promotion.")
-            
-    except Exception:
-        # ఒకవేళ అసలు ఛాంపియన్ లేకపోతే (First time)
-        print("🥇 No champion found. Setting Version 1 as the first champion!")
-        client.set_registered_model_alias(model_name, alias, "1")
+import sys
 
 def train_model():
-    # --- 1. SMART CONFIG ---
+    # --- 1. CONFIG ---
     if os.path.exists("/opt/airflow"):
+        TRACKING_URI = "http://mlflow_server:5000"
         BASE_PATH = "/opt/airflow"
-        TRACKING_URI = "http://172.18.0.1:5000"
     else:
-        BASE_PATH = "."
         TRACKING_URI = "http://localhost:5000"
+        BASE_PATH = "."
         
     mlflow.set_tracking_uri(TRACKING_URI)
-    mlflow.set_experiment("Bike_Sharing_Production")
-
+    mlflow.set_experiment("bike-sharing-experiment")
+    
     # --- 2. PATHS ---
     X_train_path = os.path.join(BASE_PATH, "data/processed/X_train.csv")
     y_train_path = os.path.join(BASE_PATH, "data/processed/y_train.csv")
     save_path = os.path.join(BASE_PATH, "models/bike_model.pkl")
 
-    if not os.path.exists(X_train_path):
-        raise FileNotFoundError(f"❌ Data not found: {X_train_path}")
-
     try:
-        X_train = pd.read_csv(X_train_path)
+        X_train_raw = pd.read_csv(X_train_path)
         y_train = pd.read_csv(y_train_path)
+        features = ['season', 'mnth', 'hr', 'holiday', 'weekday', 'workingday', 'weathersit', 'temp', 'atemp', 'hum', 'windspeed']
+        X_train = X_train_raw[[col for col in features if col in X_train_raw.columns]]
         
-        # --- 3. MLFLOW RUN ---
-        with mlflow.start_run(run_name="Airflow_Automated_Training") as run:
-            n_est = random.randint(50, 250) 
-            print(f"🚀 Training with n_estimators: {n_est}")
-            
-            model = RandomForestRegressor(n_estimators=n_est, random_state=42)
+        with mlflow.start_run(run_name="Airflow_Training_Run") as run:
+            model = RandomForestRegressor(n_estimators=random.randint(100, 200), random_state=42)
             model.fit(X_train, y_train.values.ravel())
-
-            predictions = model.predict(X_train)
-            rmse = np.sqrt(mean_squared_error(y_train, predictions))
-
-            mlflow.log_param("n_estimators", n_est)
-            mlflow.log_metric("rmse", rmse)
-
-            # మోడల్ రిజిస్టర్ చేయడం
-            model_info = mlflow.sklearn.log_model(
-                sk_model=model, 
-                artifact_path="bike_rf_model",
-                registered_model_name="Bike_Sharing_Model"
-            )
             
-            # రిజిస్టర్ అయ్యాక దాని వెర్షన్ తెలుసుకోవడం
+            rmse = np.sqrt(mean_squared_error(y_train, model.predict(X_train)))
+            mlflow.log_metric("rmse", rmse)
+            mlflow.log_param("n_estimators", model.n_estimators)
+
+            # 🚨 ఇక్కడే మ్యాజిక్! 
+            # log_model వాడకుండా నేరుగా artifact లాగా సేవ్ చేస్తున్నాం
+            joblib.dump(model, "bike_model.pkl")
+            mlflow.log_artifact("bike_model.pkl", artifact_path="model")
+            
+            # రిజిస్ట్రేషన్ కోసం సింపుల్ API ని వాడుతున్నాం
             model_name = "Bike_Sharing_Model"
-            # MLflow logic to get the latest version number
+            run_id = run.info.run_id
+            model_uri = f"runs:/{run_id}/model"
+            
+            print(f"📦 Registering model from {model_uri}...")
+            
+            # client ని వాడి నేరుగా రిజిస్టర్ చేయడం (ఇది 404 ని దాటేస్తుంది)
             client = MlflowClient()
-            model_version_details = client.get_latest_versions(model_name, stages=["None"])
-            current_version = model_version_details[0].version
+            try:
+                client.create_registered_model(model_name)
+            except:
+                pass # ఆల్రెడీ ఉంటే ఇగ్నోర్ చేయ్
+                
+            res = client.create_model_version(name=model_name, source=model_uri, run_id=run_id)
+            current_version = res.version
+            
+            # Alias సెట్ చేయడం
+            client.set_registered_model_alias(model_name, "champion", str(current_version))
 
-            # --- 4. AUTOMATED PROMOTION ---
-            # ఇక్కడ మనం రాసిన లాజిక్ కాల్ అవుతుంది
-            automated_promotion(model_name, rmse, current_version)
-
-            # --- 5. LOCAL SAVING ---
+            # లోకల్ సేవింగ్ (ముఖ్యంగా api.py కోసం)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             joblib.dump(model, save_path)
             
-            print(f"✅ SUCCESS! RMSE: {rmse} | Version: {current_version}")
+            print(f"✅ SUCCESS! RMSE: {rmse:.4f} | Version: {current_version}")
             
-        return rmse
-
     except Exception as e:
-        print(f"❌ ERROR inside train_model: {str(e)}")
-        raise e
+        print(f"❌ ERROR: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     train_model()

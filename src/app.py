@@ -1,41 +1,84 @@
-from fastapi import FastAPI
-import joblib
+import streamlit as st
+import requests
 import pandas as pd
-import yaml
-import os
+import os  
+import streamlit.components.v1 as components
 
-app = FastAPI(title="Bike Sharing Prediction API")
+# Page Config
+st.set_page_config(page_title="Bike Sharing MLOps Portal", layout="wide")
 
-# 1. పాత్ ని కంటైనర్ కి తగ్గట్టు సెట్ చేస్తున్నాం
-MODEL_PATH = "models/bike_model.pkl" 
+st.title("🚴 Bike Sharing Prediction & Monitoring")
+st.markdown("---")
 
-# ఒకవేళ ఫైల్ లేకపోతే ఎర్రర్ రాకుండా జాగ్రత్త
-if os.path.exists(MODEL_PATH):
-    model = joblib.load(MODEL_PATH)
-    print("✅ Model loaded successfully!")
-else:
-    # ఒకవేళ అక్కడ లేకపోతే ప్రస్తుత ఫోల్డర్ లో వెతుకు
-    model = joblib.load("bike_model.pkl") 
+# Layout columns: Sidebar for inputs, Main for results
+col1, col2 = st.columns([1, 2])
 
-@app.get("/")
-def home():
-    return {"status": "Success", "message": "Bike Sharing API is live!"}
-
-@app.get("/predict")
-def predict(season: int, yr: int, mnth: int, hr: int, holiday: int, 
-            weekday: int, workingday: int, weathersit: int, 
-            temp: float, atemp: float, hum: float, windspeed: float):
+with col1:
+    st.header("🛠️ Input Features")
+    season = st.selectbox("Season", [1, 2, 3, 4], help="1:Spring, 2:Summer, 3:Fall, 4:Winter")
+    mnth = st.slider("Month", 1, 12, 6)
+    hr = st.slider("Hour of Day", 0, 23, 12)
+    temp = st.slider("Temperature (Normalized)", 0.0, 1.0, 0.5)
+    hum = st.slider("Humidity (Normalized)", 0.0, 1.0, 0.5)
     
-    data_dict = {
-        'season': [season], 'yr': [yr], 'mnth': [mnth], 'hr': [hr],
-        'holiday': [holiday], 'weekday': [weekday], 'workingday': [workingday],
-        'weathersit': [weathersit], 'temp': [temp], 'atemp': [atemp],
-        'hum': [hum], 'windspeed': [windspeed]
-    }
+    predict_btn = st.button("🚀 Predict Bike Demand", use_container_width=True)
 
-    features = pd.DataFrame(data_dict)
-    prediction = model.predict(features)
+with col2:
+    st.header("📊 Prediction Results")
+    if predict_btn:
+        # Docker నుండి Windows API కి కనెక్ట్ అవ్వడానికి సరైన URL
+        url = "http://host.docker.internal:9999/predict"
+        params = {
+            "season": season, "mnth": mnth, "hr": hr,
+            "holiday": 0, "weekday": 3, "workingday": 1,
+            "weathersit": 1, "temp": temp, "atemp": temp,
+            "hum": hum, "windspeed": 0.1
+        }
+        
+        try:
+            with st.spinner('Calculating demand...'):
+                response = requests.get(url, params=params, timeout=5)
+                
+            if response.status_code == 200:
+                res = response.json()
+                prediction = res.get('predicted_bikes', 0)
+                st.metric(label="Predicted Bikes Needed", value=int(prediction))
+                st.balloons()
+            else:
+                st.error(f"❌ API Error: {response.text}")
+        except Exception as e:
+            st.error(f"📡 Connection Failed: Make sure api.py is running on port 9999!")
+
+    st.markdown("---")
     
-    return {
-        "predicted_bikes": int(prediction[0])
-    }
+    # --- Monitoring Section ---
+    st.header("📈 Model Monitoring")
+    st.info("View the latest Data Drift analysis from Evidently AI.")
+    
+    if st.button("🔍 View Data Drift Report"):
+        # 🔥 కొత్త docker-compose Path కి అనుగుణంగా మార్చాను
+        #report_path = "/opt/airflow/src/monitoring_report.html" 
+        report_path = "monitoring_report.html"
+        
+        if os.path.exists(report_path):
+            try:
+                with open(report_path, 'r', encoding='utf-8') as f:
+                    html_data = f.read()
+                # నేరుగా బ్రౌజర్‌లో HTML రిపోర్ట్‌ని చూపిస్తుంది
+                components.html(html_data, height=1000, scrolling=True)
+            except Exception as e:
+                st.error(f"Error reading report: {e}")
+        else:
+            st.warning(f"⚠️ Report file not found at: {report_path}")
+            st.info("Please run the Airflow DAG first to generate the report.")
+
+# Sidebar status
+st.sidebar.markdown(f"""
+---
+**System Status:**
+- **Frontend:** Running (Docker)
+- **Shared Path:** `/opt/airflow/src/`
+- **Backend API:** http://localhost:9999
+- **Database:** PostgreSQL
+- **Monitoring:** Evidently AI
+""")

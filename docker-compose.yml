@@ -1,0 +1,124 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres_db
+    networks: [bike-mlops-net]
+    ports: ["5432:5432"]
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports: ["4566:4566"]
+    networks: [bike-mlops-net]
+    environment:
+      - SERVICES=s3
+    volumes:
+      - "./localstack_data:/var/lib/localstack"
+
+  airflow-init:
+    image: apache/airflow:2.7.1
+    container_name: airflow_init
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [bike-mlops-net]
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    command: >
+      bash -c "airflow db init &&
+      airflow users create --username admin --firstname admin --lastname admin --role Admin --email admin@example.com --password admin"
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.8.1
+    container_name: mlflow_server
+    ports: ["5000:5000"]
+    networks: [bike-mlops-net]
+    volumes:
+      - ./mlflow_data:/mlflow_db
+      - ./mlruns:/mlflow/mlruns
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////mlflow_db/mlflow.db --default-artifact-root /mlflow/mlruns
+
+  webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_webserver
+    command: webserver
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on:
+      airflow-init: {condition: service_completed_successfully}
+      mlflow: {condition: service_started}
+    networks: [bike-mlops-net]
+    environment: &airflow-common-env
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY=my_secret_key_123
+    ports: ["8081:8080"]
+    volumes: &airflow-common-volumes
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      - ./models:/opt/airflow/models
+      - ./mlruns:/mlruns
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_scheduler
+    command: scheduler
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    user: root
+    depends_on:
+      airflow-init: {condition: service_completed_successfully}
+    networks: [bike-mlops-net]
+    environment: *airflow-common-env
+    volumes: *airflow-common-volumes
+
+  bike_sharing_frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: streamlit_app
+    ports: ["8501:8501"]
+    networks: [bike-mlops-net]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      - API_URL=http://host.docker.internal:9999
+    depends_on:
+      postgres: {condition: service_healthy}
+    # 🔥 ఇక్కడ పాత్ మార్చాను - Airflow తో సింక్ అవ్వడానికి
+    volumes:
+      - ./src:/opt/airflow/src
+    # 🔥 కమాండ్ లో కూడా పాత్ కరెక్ట్ గా ఇచ్చాను
+    command: ["streamlit", "run", "/opt/airflow/src/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# --- Prometheus: మెట్రిక్స్ కలెక్ట్ చేయడానికి ---
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports: ["9090:9090"]
+    networks: [bike-mlops-net]
+
+  # --- Grafana: అందమైన డ్యాష్‌బోర్డ్స్ చూడటానికి ---
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports: ["3000:3000"]
+    networks: [bike-mlops-net]
+    depends_on: [prometheus]
+    
+networks:
+  bike-mlops-net:
+    driver: bridge

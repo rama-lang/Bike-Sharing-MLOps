@@ -1,11 +1,41 @@
+# Environments
 venv/
-__pycache__/
-mlruns/
+.env
 
+# Python artifacts
+__pycache__/
+*.pyc
+
+# MLflow runs (it gets huge, don't push to git)
+mlruns/
+mlflow_data/
+
+# Data (Keep folder structure but ignore large files)
 data/raw/*.csv
 data/processed/*.csv
+data/*.db
+data/*.sqlite
 
+# Models - ఇది models ఫోల్డర్ మరియు root లో ఉన్న అన్ని .pkl ఫైల్స్ ని ఆపుతుంది
 models/*.pkl
+*.pkl
+bike_model.pkl
 
+# Monitoring Reports
+monitoring_report.html
+src/monitoring_report.html
+
+# LocalStack Data
+localstack_data/
+
+# Airflow specific (MUST ADD to fix your error)
+logs/
+airflow-*.err
+airflow-*.out
+airflow-*.log
+airflow.db
+standalone_admin_password.txt
+
+# OS files
 .DS_Store
-.env
+Thumbs.db

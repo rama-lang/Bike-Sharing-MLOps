@@ -1,50 +1,21 @@
-import boto3
-import pandas as pd
-import yaml
 import os
-
-CONFIG_PATH = os.path.join("/opt/airflow/src", "config.yaml")
+import sys
 
 def load_data():
-    os.chdir("/opt/airflow")
-    if not os.path.exists(CONFIG_PATH):
-        print(f"Error: {CONFIG_PATH} file not found!")
-        return None
+    # కంటైనర్ లోపల ఫైల్ పాత్ (మనం ఇందాక వెరిఫై చేసింది)
+    data_file = "/opt/airflow/data/bike_sharing_raw.csv"
+    
+    print(f"🔍 Checking for local data file at: {data_file}")
 
-    with open(CONFIG_PATH, "r") as f:
-        config = yaml.safe_load(f)
-
-    try:
-        s3 = boto3.client(
-            's3',
-            endpoint_url=config['aws']['endpoint_url'],
-            aws_access_key_id="test",
-            aws_secret_access_key="test",
-            region_name=config['aws']['region_name']
-        )
-
-        bucket_name = config['aws']['bucket_name']
-        file_key = config['aws']['raw_file_key']
-        local_path = config['data']['raw_path']
-
-        
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
-       
-        print(f"Connecting to LocalStack at {config['aws']['endpoint_url']}...")
-        print(f"Downloading {file_key} from bucket: {bucket_name}...")
-        
-        s3.download_file(bucket_name, file_key, local_path)
-        print(f"Success! File saved to: {local_path}")
-
-       
-        df = pd.read_csv(local_path)
-        print(f"Total records loaded: {df.shape[0]}")
-        return df
-
-    except Exception as e:
-        print(f"Error occurred during data ingestion: {e}")
-        return None
+    if os.path.exists(data_file):
+        print(f"✅ Found it! Data is already present. Skipping download.")
+        # ఒకవేళ ఫైల్ సైజ్ కూడా చూడాలి అనుకుంటే
+        size = os.path.getsize(data_file)
+        print(f"📊 File size: {size} bytes")
+        sys.exit(0) # Success!
+    else:
+        print(f"❌ Error: File NOT found at {data_file}!")
+        sys.exit(1) # Fail!
 
 if __name__ == "__main__":
     load_data()

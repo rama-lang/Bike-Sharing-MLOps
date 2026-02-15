@@ -1,0 +1,14 @@
+data:
+  # ✅ ఖచ్చితంగా పనిచేసే పర్మనెంట్ URL
+  url: "https://raw.githubusercontent.com/arashgmn/bike-sharing/master/hour.csv"
+  raw_path: "/opt/airflow/data/bike_sharing_raw.csv" 
+  processed_dir: "/opt/airflow/data/processed"
+  test_size: 0.2
+
+model:
+  save_path: "/opt/airflow/models/bike_model.pkl"
+
+aws:
+  endpoint_url: "http://localstack:4566"
+  bucket_name: "bike-sharing"
+  region_name: "us-east-1"
