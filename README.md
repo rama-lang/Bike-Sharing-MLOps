@@ -1,44 +1,149 @@
-🚲 End-to-End MLOps: Bike-Sharing Demand PredictionThis repository demonstrates a production-ready Automated Machine Learning Pipeline. It covers the entire lifecycle from data ingestion to automated model promotion and CI/CD.
+🚴 Bike Sharing MLOps - Production Grade Pipeline
+This is a comprehensive End-to-End MLOps project designed to predict bike-sharing demand. It integrates automated training, continuous monitoring, and real-time serving with a robust orchestration layer.
+🚀 Project Overview
+This project implements a complete machine learning lifecycle including:
 
-🏗️ Project ArchitectureThe pipeline is built on three main pillars:Orchestration (Airflow): Schedules and manages the workflow tasks.Model Governance (MLflow): Tracks experiments and manages the "Champion" model via the Model Registry.Infrastructure (Docker): Containerizes the entire stack, including LocalStack (S3) and the Airflow environment.
 
-🚀 Key FeaturesContinuous Training (CT): Automated retraining triggers via Airflow to handle new data.Experiment Tracking: 
-Logging hyperparameters (e.g., n_estimators) and performance metrics (RMSE) using MLflow.Model Registry: 
-Automated versioning with the @champion alias for seamless production deployment.Cloud Simulation: Integrated LocalStack to simulate AWS S3 for data ingestion without cloud costs.CI/CD Pipeline: 
-Automated code quality and syntax checks using GitHub Actions.
+ML Pipeline: Automated ingestion, validation, training, and testing.
++1
 
-🛠️ Tech StackCategoryTechnologyLanguagePython 3.9+OrchestrationApache AirflowML Tracking & RegistryMLflowCloud SimulationLocalStack (AWS S3)ContainerizationDocker & Docker ComposeCI/CDGitHub Actions
-📈 Pipeline WorkflowIngest: Fetches raw data from S3 (LocalStack) using boto3 and caches it in data/processed.Train: 
-Trains a Scikit-learn Random Forest model with dynamic hyperparameter logging.Evaluate & Register: 
-Compares new results with the existing @champion and registers the new version.Predict: 
-Loads the current @champion from the Registry for real-time or batch inference.
 
-💻 Setup & Run1. Start the InfrastructureSpin up the Airflow and MLflow containers:
-PowerShelldocker-compose up -d
+Orchestration: Apache Airflow for managing complex workflows.
++1
 
-2. Setup LocalStack S3 (One-time)Simulate the cloud environment and upload the raw dataset:
-PowerShell# Create the S3 Bucket
-docker exec -it localstack_main awslocal s3 mb s3://bike-sharing-data
 
-# Upload Raw Data to S3
-docker cp data/raw/bike_sharing_raw.csv localstack_main:/tmp/data.csv
-docker exec -it localstack_main awslocal s3 cp /tmp/data.csv s3://bike-sharing-data/bike_sharing_raw.csv
-3. MonitoringAirflow UI: http://localhost:8080 (Check DAG status)MLflow UI: http://localhost:5000 (Compare model versions)
+Tracking & Registry: MLflow for experiment management and model versioning.
++1
 
-Folder Structure:
-.
-├── .github/
-│   └── workflows/
-│       └── main.yml            # GitHub Actions (CI/CD)
-├── dags/
-│   └── bike_sharing_dag.py     # Airflow DAG (The Heart)
-├── src/
-│   ├── ingestion.py            # S3 Data Pulling
-│   ├── train.py                # Model Training & MLflow Registry
-│   ├── predict.py              # Inference Logic (The Brain)
-│   └── app.py                  # Streamlit/Flask UI
-├── data/                       # Local Data Storage
-├── docker-compose.yaml         # Container Orchestration
-├── Dockerfile                  # Image Build Instructions
-├── requirements.txt            # Python Dependencies
-└── README.md                   # Project Documentation
+
+Monitoring: Evidently AI for data drift and Prometheus/Grafana for real-time metrics.
++1
+
+
+API & UI: FastAPI for high-performance serving and Streamlit for an interactive dashboard.
+
+🏗️ Architecture Flow
+The system is built on a containerized microservices architecture:
+
+
+Frontend (Port 8501): Streamlit app for user interaction.
++1
+
+
+Backend API (Port 9999): FastAPI serving model predictions.
++1
+
+
+Database: PostgreSQL for storing Airflow metadata and prediction logs.
++1
+
+
+Storage: LocalStack simulating AWS S3 for monitoring reports.
++1
+
+
+Monitoring: Prometheus (Scraping metrics) and Grafana (Visualization).
++1
+
+🛠️ Tech Stack
+
+Core: Python 3.9 
+
+
+ML: Scikit-Learn (RandomForestRegressor) 
++2
+
+
+Orchestration: Apache Airflow 
+
+
+Tracking: MLflow 
+
+
+Monitoring: Evidently AI, Prometheus, Grafana 
+
+
+Infrastructure: Docker, Docker Compose, LocalStack 
+
+🔄 The MLOps Lifecycle
+1. Automated ML Pipeline (bike_sharing_final_pipeline_v4)
+Runs daily to ensure the model is always fresh:
+
+
+Ingestion & Validation: Checks data quality and schema.
+
+
+Training: Trains a Random Forest model, logs metrics to MLflow, and saves the "Champion" model.
++1
+
+
+E2E Testing: Calls the live API via host.docker.internal to verify serving readiness.
++1
+
+2. Intelligent Monitoring & Retraining (model_monitoring_dag)
+
+Drift Detection: Evidently AI compares current prediction data against training data.
++1
+
+
+Short-Circuit Logic: If drift is NOT detected, the pipeline stops to save resources.
+
+
+Auto-Retraining: If drift exceeds thresholds, an alert is sent to Slack, and a retraining job is automatically triggered.
++1
+
+🖥️ Getting Started
+Prerequisites
+Docker Desktop
+
+Python 3.9+
+
+Git
+
+Setup Instructions
+Clone the repo:
+
+Bash
+git clone <your-repo-url>
+cd bike-sharing-mlops
+Start all services:
+
+Bash
+docker-compose up -d
+Run the API on your Host machine (Windows):
+
+Bash
+pip install -r src/requirements.txt
+python src/api.py
+Access Ports
+
+Airflow: http://localhost:8081 (admin/admin) 
+
+
+MLflow: http://localhost:5000 
+
+
+Streamlit: http://localhost:8501 
+
+
+Grafana: http://localhost:3000 
+
+📊 Monitoring Dashboard
+The Grafana dashboard provides real-time insights into:
+
+API Health: Status of the FastAPI service.
+
+Total Predictions: Real-time counter of bike demand requests.
+
+Latency: Average response time for the /predict endpoint.
+
+System Metrics: Memory and CPU usage of the API.
+
+📂 Project Structure
+Plaintext
+├── dags/             # Airflow DAG definitions
+├── data/             # Raw and processed data (ignored by Git)
+├── models/           # Trained .pkl models (ignored by Git)
+├── src/              # Core source code (API, Training, Monitoring)
+├── docker-compose.yml# Service orchestration
+└── prometheus.yml    # Monitoring configuration
